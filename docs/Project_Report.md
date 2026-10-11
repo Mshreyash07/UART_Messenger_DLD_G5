@@ -1,0 +1,139 @@
+# CS203 Group 5 — UART Communication System
+
+## 1. Project Overview
+
+This project implements an 8-bit UART (Universal Asynchronous Receiver/Transmitter) communication system using Verilog. The design is software-only and is developed and verified through simulation; no physical hardware or FPGA deployment is included in the current scope.
+
+The current baseline uses UART 8N1 framing:
+- 8 data bits
+- No parity bit
+- 1 stop bit
+- Idle serial line HIGH
+- Data bits transmitted least-significant bit first
+
+## 2. Objectives
+
+- Generate timing pulses for UART communication from a system clock.
+- Convert 8-bit parallel data into a serial UART frame.
+- Reconstruct received serial data into an 8-bit byte.
+- Buffer bytes in a First-In, First-Out (FIFO) queue.
+- Integrate the modules and verify data transfer with simulation testbenches.
+- Inspect simulation waveforms to understand timing and control behavior.
+
+## 3. System Architecture
+
+```text
+8-bit input data
+      |
+      v
++-------------+
+| FIFO Buffer |
++-------------+
+      |
+      v
++-------------+       +------------------+
+| UART TX FSM |<------| Baud-rate timing |
++-------------+       +------------------+
+      |
+      | serial TX (loopback in testbench)
+      v
++-------------+
+| UART RX FSM |
++-------------+
+      |
+      v
+8-bit received data
+      |
+      v
+Testbench compares received and expected data
+```
+
+The baud-rate generator supplies timing pulses to the transmitter. The receiver derives its sampling timing from the incoming start bit and its configured clocks-per-bit parameter.
+
+## 4. Modules
+
+| File | Purpose |
+|---|---|
+| `rtl/baud_gen.v` | Generates periodic baud timing ticks from the system clock. |
+| `rtl/uart_tx.v` | Implements an FSM that sends a start bit, eight data bits, and a stop bit. |
+| `rtl/uart_rx.v` | Detects the start bit, samples the data bits, checks the stop bit, and pulses `rx_done` when a valid byte is received. |
+| `rtl/fifo.v` | Stores up to 16 bytes and provides read/write, full, and empty behavior. |
+| `rtl/uart_top.v` | Connects the FIFO, baud generator, transmitter, receiver, and FIFO/TX controller. |
+
+## 5. Tools
+
+- Verilog for RTL modules and testbenches
+- Icarus Verilog for compilation and simulation
+- VVP for running compiled simulations
+- GTKWave for inspecting VCD waveform files
+- Visual Studio Code for editing and running commands
+- Git and GitHub for version control
+
+## 6. Verification and Results
+
+The following checks have been run by the team during development:
+
+- **Baud generator:** Testbench verified that timing ticks occur at the expected interval using reduced parameters for a quick simulation.
+- **UART transmitter:** Testbench checked serial-frame behavior and multiple data patterns.
+- **UART receiver:** Testbench successfully received the test byte `8'hA5`.
+- **FIFO:** Testbench passed reset, FIFO ordering, full flag, write rejection while full, draining, and pointer-wraparound tests.
+- **Top-level loopback:** Testbench passed the four-byte end-to-end test using `A5`, `3C`, `00`, and `FF`.
+
+Simulation results should be retained as terminal logs and GTKWave screenshots. These results describe the tests run so far; additional boundary and robustness testing can be added later.
+
+## 7. Known Scope and Limitations
+
+- The current baseline uses 8N1 UART framing.
+- The project is verified through simulation only.
+- The current receiver rejects a frame with an invalid stop bit but does not yet expose a dedicated framing-error output.
+- Optional parity, Hamming-code protection, and encrypted messaging are future extensions and are not part of the verified baseline yet.
+
+## 8. Planned Extensions
+
+### Parity
+Add optional even/odd parity generation and checking, with a `parity_error` indicator and test cases containing intentional bit flips.
+
+### Hamming Code
+Consider Hamming (12,8) for single-bit correction or extended Hamming (13,8) for single-error correction and double-error detection (SECDED). The selected code and payload format should be finalized before implementation.
+
+### Encrypted Messaging
+An optional future extension may encrypt the payload before UART transmission and decrypt it at the receiver. A secure design must also handle keys appropriately and authenticate messages; encryption alone does not guarantee tamper detection.
+
+## 9. Team
+
+| Roll Number | Name |
+|---|---|
+| 2025CSB1223 | Mishra Rishikesh |
+| 2025CSB1204 | Kanchi Aggarwal |
+| 2025CSB1995 | Gunjan Chaudhary |
+| 2025CSB1220 | Meet Trivedi |
+| 2025CSB1221 | Menkudle Shreyash |
+
+## 10. How to Run the Top-Level Simulation
+
+Run these commands from the project root, assuming Icarus Verilog is available on the terminal PATH:
+
+```powershell
+iverilog -g2012 -s tb_uart_top -o sim/tb_uart_top.out tb/tb_uart_top.v rtl/uart_top.v rtl/baud_gen.v rtl/fifo.v rtl/uart_tx.v rtl/uart_rx.v
+vvp sim/tb_uart_top.out
+```
+
+To inspect the waveform generated by the testbench:
+
+```powershell
+gtkwave sim/uart_top.vcd
+```
+
+## 11. Evidence to Include
+
+Add the following images or files to `docs/` before the final demonstration:
+
+- `baud_gen_waveform.png` — clock, reset, baud tick, and counter.
+- `uart_tx_waveform.png` — transmit signal, data, busy/done, and TX FSM state.
+- `uart_rx_waveform.png` — RX serial input, received data, and completion pulse.
+- `uart_top_waveform.png` — FIFO status, TX activity, RX data, and top-level controller state.
+- `simulation_results.txt` — copied terminal output for the test runs.
+
+---
+
+**Status:** Baseline UART system implemented and simulation tests reported passing. Parity, Hamming-code protection, and encrypted messaging are planned extensions.
