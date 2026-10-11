@@ -1,34 +1,102 @@
-
-module baud_gen #(
-    parameter integer CLK_FREQ_HZ = 50000000,
-    parameter integer BAUD_RATE = 9600
-)(
+module uart_tx(
     input wire clk,
     input wire rst,
-    output reg baud_tick
+    input wire tx_start,
+    input wire [7:0] tx_data,
+    input wire baud_tick,
+    output reg tx,
+    output reg tx_busy,
+    output reg tx_done
 );
 
-    localparam integer CLKS_PER_BIT = CLK_FREQ_HZ / BAUD_RATE;
+    localparam IDLE      = 3'd0;
+    localparam START_WAIT = 3'd1;
+    localparam START_BIT = 3'd2;
+    localparam DATA      = 3'd3;
+    localparam STOP_BIT  = 3'd4;
+    localparam STOP_HOLD = 3'd5;
 
-    localparam integer COUNTER_WIDTH =
-        (CLKS_PER_BIT <= 1) ? 1 : $clog2(CLKS_PER_BIT);
-
-    reg [COUNTER_WIDTH-1:0] counter;
+    reg [2:0] state;
+    reg [7:0] shift_reg;
+    reg [2:0] bit_index;
 
     always @(posedge clk or posedge rst) begin
         if (rst) begin
-            counter   <= 0;
-            baud_tick <= 0;
+            state     <= IDLE;
+            shift_reg <= 8'b0;
+            bit_index <= 3'b0;
+            tx        <= 1'b1;
+            tx_busy   <= 1'b0;
+            tx_done   <= 1'b0;
         end
         else begin
-            if (counter == CLKS_PER_BIT - 1) begin
-                counter   <= 0;
-                baud_tick <= 1;
-            end
-            else begin
-                counter   <= counter + 1'b1;
-                baud_tick <= 0;
-            end
+            tx_done <= 1'b0;
+
+            case (state)
+                IDLE: begin
+                    tx      <= 1'b1;
+                    tx_busy <= 1'b0;
+
+                    if (tx_start) begin
+                        shift_reg <= tx_data;
+                        bit_index <= 3'd0;
+                        tx_busy   <= 1'b1;
+                        state     <= START_WAIT;
+                    end
+                end
+
+                START_WAIT: begin
+                    if (baud_tick) begin
+                        tx    <= 1'b0;
+                        state <= START_BIT;
+                    end
+                end
+
+                START_BIT: begin
+                    if (baud_tick) begin
+                        tx        <= shift_reg[0];
+                        shift_reg <= {1'b0, shift_reg[7:1]};
+                        bit_index <= 3'd1;
+                        state     <= DATA;
+                    end
+                end
+
+                DATA: begin
+                    if (baud_tick) begin
+                        tx        <= shift_reg[0];
+                        shift_reg <= {1'b0, shift_reg[7:1]};
+
+                        if (bit_index == 3'd7) begin
+                            state <= STOP_BIT;
+                        end
+                        else begin
+                            bit_index <= bit_index + 1'b1;
+                        end
+                    end
+                end
+
+                STOP_BIT: begin
+                    if (baud_tick) begin
+                        tx    <= 1'b1;
+                        state <= STOP_HOLD;
+                    end
+                end
+
+                STOP_HOLD: begin
+                    if (baud_tick) begin
+                        tx      <= 1'b1;
+                        tx_busy <= 1'b0;
+                        tx_done <= 1'b1;
+                        state   <= IDLE;
+                    end
+                end
+
+                default: begin
+                    state   <= IDLE;
+                    tx      <= 1'b1;
+                    tx_busy <= 1'b0;
+                end
+            endcase
         end
     end
 
