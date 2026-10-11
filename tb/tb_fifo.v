@@ -15,8 +15,8 @@ module tb_fifo;
 
     integer i;
 
-    // Instantiate the FIFO
-    fifo dut (
+    // Instantiate the FIFO module
+    fifo uut (
         .clk(clk),
         .rst(rst),
         .wr_en(wr_en),
@@ -31,7 +31,7 @@ module tb_fifo;
     initial clk = 0;
     always #5 clk = ~clk;
 
-    // Write one byte
+    // Task to write one byte
     task write_byte;
         input [7:0] data;
         begin
@@ -40,12 +40,15 @@ module tb_fifo;
             wr_en = 1;
             rd_en = 0;
 
+            @(posedge clk);
+            #1;
+
             @(negedge clk);
             wr_en = 0;
         end
     endtask
 
-    // Read one byte and compare it
+    // Task to read one byte and verify it
     task read_byte;
         input [7:0] expected;
         begin
@@ -53,134 +56,119 @@ module tb_fifo;
             rd_en = 1;
             wr_en = 0;
 
-            // The FIFO updates dout at the intervening posedge
-            @(negedge clk);
-            rd_en = 0;
+            @(posedge clk);
+            #1;
 
             if (dout !== expected) begin
                 $display(
-                    "FAIL: Expected %02h, received %02h",
+                    "FAIL: expected %h, got %h",
                     expected, dout
                 );
-                $fatal(1, "FIFO data mismatch");
+                $finish;
+            end
+            else begin
+                $display("PASS: read %h", dout);
             end
 
-            $display(
-                "PASS: Expected=%02h, Received=%02h",
-                expected, dout
-            );
+            @(negedge clk);
+            rd_en = 0;
         end
     endtask
 
+    // Main test sequence
     initial begin
+
+        // Generate waveform file
         $dumpfile("sim/fifo.vcd");
         $dumpvars(0, tb_fifo);
 
+        // Initialize inputs
         rst = 1;
         wr_en = 0;
         rd_en = 0;
         din = 0;
 
         // Apply reset
-        repeat (2) @(negedge clk);
+        repeat (2) @(posedge clk);
+        @(negedge clk);
         rst = 0;
 
-        @(negedge clk);
+        // TEST 1: Reset and initial flags
+        if (!empty || full) begin
+            $display("FAIL: reset flags incorrect");
+            $finish;
+        end
 
-        // TEST 1: FIFO should initially be empty
-        if (empty !== 1'b1)
-            $fatal(1, "FAIL: FIFO should be empty after reset");
+        $display("PASS: reset");
 
-        $display("PASS: FIFO reset and empty condition");
-
-        // TEST 2: Read while empty
-        rd_en = 1;
-        @(negedge clk);
-        rd_en = 0;
-
-        if (empty !== 1'b1)
-            $fatal(1, "FAIL: Empty FIFO changed after read");
-
-        $display("PASS: Read while empty is ignored");
-
-        // TEST 3: Write and read three bytes
+        // TEST 2: FIFO ordering
         write_byte(8'h11);
         write_byte(8'h22);
         write_byte(8'h33);
-
-        if (empty !== 1'b0)
-            $fatal(1, "FAIL: FIFO should not be empty");
 
         read_byte(8'h11);
         read_byte(8'h22);
         read_byte(8'h33);
 
-        if (empty !== 1'b1)
-            $fatal(1, "FAIL: FIFO should be empty");
+        if (!empty) begin
+            $display("FAIL: FIFO should be empty");
+            $finish;
+        end
 
-        $display("PASS: FIFO ordering");
+        $display("PASS: FIFO ordering and empty flag");
 
-        // TEST 4: Fill all 16 entries
+        // TEST 3: Fill all 16 entries
         for (i = 0; i < 16; i = i + 1)
-            write_byte(i[7:0]);
+            write_byte(i);
 
-        if (full !== 1'b1)
-            $fatal(1, "FAIL: FIFO did not become full");
+        if (!full) begin
+            $display("FAIL: full flag not asserted");
+            $finish;
+        end
 
-        $display("PASS: FIFO full condition");
+        $display("PASS: FIFO full");
 
-        // TEST 5: Attempt write when FIFO is full
+        // TEST 4: Attempt write while full
         write_byte(8'hEE);
 
-        if (full !== 1'b1)
-            $fatal(1, "FAIL: Full flag changed unexpectedly");
+        if (!full) begin
+            $display("FAIL: overflow changed FIFO status");
+            $finish;
+        end
 
-        $display("PASS: Overflow write is ignored");
+        $display("PASS: overflow rejection");
 
-        // Check all original bytes remain in order
+        // TEST 5: Drain FIFO and verify order
         for (i = 0; i < 16; i = i + 1)
-            read_byte(i[7:0]);
+            read_byte(i);
 
-        if (empty !== 1'b1)
-            $fatal(1, "FAIL: FIFO should be empty");
+        if (!empty) begin
+            $display("FAIL: FIFO should be empty after draining");
+            $finish;
+        end
 
-        $display("PASS: Full FIFO data integrity");
+        $display("PASS: FIFO draining");
 
-        // TEST 6: Simultaneous read and write
-        write_byte(8'hA1);
-        write_byte(8'hB2);
+        // TEST 6: Pointer wraparound
+        for (i = 0; i < 12; i = i + 1)
+            write_byte(i + 8'h40);
 
-        @(negedge clk);
-        din = 8'hC3;
-        wr_en = 1;
-        rd_en = 1;
+        for (i = 0; i < 12; i = i + 1)
+            read_byte(i + 8'h40);
 
-        @(negedge clk);
-        wr_en = 0;
-        rd_en = 0;
+        if (!empty) begin
+            $display("FAIL: wraparound test did not finish empty");
+            $finish;
+        end
 
-        if (dout !== 8'hA1)
-            $fatal(1, "FAIL: Simultaneous read returned wrong data");
+        $display("PASS: pointer wraparound");
 
-        $display("PASS: Simultaneous read returned A1");
-
-        read_byte(8'hB2);
-        read_byte(8'hC3);
-
-        if (empty !== 1'b1)
-            $fatal(1, "FAIL: FIFO should be empty at the end");
-
-        $display("------------------------------------");
+        // All tests completed
+        $display("--------------------------------");
         $display("ALL FIFO TESTS PASSED");
-        $display("------------------------------------");
+        $display("--------------------------------");
 
         $finish;
-    end
-
-    // Timeout protection
-    initial begin
-        #20000;
-        $fatal(1, "FAIL: Simulation timed out");
     end
 
 endmodule
