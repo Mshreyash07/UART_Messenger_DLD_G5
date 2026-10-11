@@ -300,13 +300,13 @@ should be considered for a secure-messaging demonstration.
 
 ## 12. Team Members
 
-  Roll Number   Name
-  ------------- -------------------
-  2025CSB1223   Mishra Rishikesh
-  2025CSB1204   Kanchi Aggarwal
-  2025CSB1995   Gunjan Chaudhary
-  2025CSB1220   Meet Trivedi
-  2025CSB1221   Menkudle Shreyash
+| Roll Number | Name |
+|---|---|
+| 2025CSB1223 | Mishra Rishikesh |
+| 2025CSB1204 | Kanchi Aggarwal |
+| 2025CSB1995 | Gunjan Chaudhary |
+| 2025CSB1220 | Meet Trivedi |
+| 2025CSB1221 | Menkudle Shreyash |
 
 ## 13. Stage Status
 
@@ -317,10 +317,3 @@ simulation checks are in place. The next stage is to continue
 verification and extend the design with parity-based error detection and
 Hamming-code protection. Encryption remains a proposed extension until
 its scope and implementation are decided.
-
-------------------------------------------------------------------------
-
-**Report maintenance note:** Keep this document synchronized with the
-actual repository files and latest test output. Do not mark a waveform
-screenshot or test log as included until it has been saved under
-`docs/`.
