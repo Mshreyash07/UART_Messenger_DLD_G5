@@ -62,7 +62,7 @@ module tb_uart_rx;
 
     // Main test sequence
     initial begin
-        $dumpfile("uart_rx.vcd");
+        $dumpfile("sim/uart_rx.vcd");
         $dumpvars(0, tb_uart_rx);
 
         reset = 1;
