@@ -1,4 +1,3 @@
-
 `timescale 1ns/1ps
 
 module tb_uart_rx;
@@ -11,87 +10,96 @@ module tb_uart_rx;
     wire rx_done;
     wire rx_busy;
 
-    reg done_seen;
+    localparam integer CLK_FREQ_HZ = 100_000_000;
+    localparam integer BAUD_RATE   = 6_250_000;
+    localparam integer CLKS_PER_BIT = CLK_FREQ_HZ / BAUD_RATE; 
 
-    localparam CLKS_PER_BIT = 16;
+    integer i;
+    integer done_count;
+    integer old_done_count;
+    reg [7:0] last_rx_data;
 
-    // Connect the receiver module to the testbench
     uart_rx #(
-        .CLKS_PER_BIT(CLKS_PER_BIT)
+        .CLK_FREQ_HZ(CLK_FREQ_HZ),
+        .BAUD_RATE(BAUD_RATE)
     ) dut (
-        .clk(clk),
-        .reset(reset),
-        .rx(rx),
-        .rx_data(rx_data),
-        .rx_done(rx_done),
-        .rx_busy(rx_busy)
+        .clk(clk), .reset(reset), .rx(rx),
+        .rx_data(rx_data), .rx_done(rx_done), .rx_busy(rx_busy)
     );
 
-    // Generate a clock with a 10 ns period
-    initial clk = 0;
+    initial clk = 1'b0;
     always #5 clk = ~clk;
 
-    // Remember when the receiver finishes
-    always @(posedge clk) begin
-        if (reset)
-            done_seen <= 0;
-        else if (rx_done)
-            done_seen <= 1;
+   
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            done_count   <= 0;
+            last_rx_data <= 8'b0;
+        end
+        else if (rx_done) begin
+            done_count   <= done_count + 1;
+            last_rx_data <= rx_data;
+        end
     end
 
-    // Task to transmit one simulated UART frame
     task send_byte;
         input [7:0] data;
-        integer i;
+        integer bit_num;
         begin
-            // Start bit: LOW
-            rx = 0;
+            @(negedge clk);
+            rx = 1'b0; 
             repeat (CLKS_PER_BIT) @(negedge clk);
 
-            // Send 8 data bits, LSB first
-            for (i = 0; i < 8; i = i + 1) begin
-                rx = data[i];
+            for (bit_num = 0; bit_num < 8; bit_num = bit_num + 1) begin
+                rx = data[bit_num];
                 repeat (CLKS_PER_BIT) @(negedge clk);
             end
 
-            // Stop bit: HIGH
-            rx = 1;
+            rx = 1'b1; 
             repeat (CLKS_PER_BIT) @(negedge clk);
         end
     endtask
 
-    // Main test sequence
+    task test_byte;
+        input [7:0] expected;
+        begin
+            old_done_count = done_count;
+            send_byte(expected);
+            while (done_count == old_done_count)
+                @(negedge clk);
+            #1;
+
+            if (last_rx_data !== expected)
+                $fatal(1, "FAIL: Expected %h, received %h", expected, last_rx_data);
+            $display("PASS: RX received %h correctly", last_rx_data);
+        end
+    endtask
+
     initial begin
         $dumpfile("sim/uart_rx.vcd");
         $dumpvars(0, tb_uart_rx);
 
-        reset = 1;
-        rx = 1;             // Idle line is HIGH
-        done_seen = 0;
+        reset = 1'b1;
+        rx = 1'b1; 
+        done_count = 0;
+        last_rx_data = 0;
 
         repeat (4) @(negedge clk);
-        reset = 0;
+        reset = 1'b0;
+        repeat (2) @(negedge clk);
 
-        // Send hexadecimal A5
-        send_byte(8'hA5);
+        test_byte(8'hA5);
+        test_byte(8'h3C);
+        test_byte(8'h00);
+        test_byte(8'hFF);
 
-        // Wait for reception to complete
-        wait (done_seen == 1);
-        #1;
-
-        if (rx_data === 8'hA5)
-            $display("PASS: RX received A5 correctly");
-        else
-            $display("FAIL: Expected A5, received %h", rx_data);
-
+        $display("ALL UART RX TESTS PASSED");
         $finish;
     end
 
-    // Stop the test if it gets stuck
     initial begin
-        #20000;
-        $display("FAIL: Simulation timed out");
-        $finish;
+        #50000;
+        $fatal(1, "FAIL: UART RX simulation timed out");
     end
 
 endmodule
