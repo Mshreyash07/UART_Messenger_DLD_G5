@@ -1,32 +1,26 @@
-
 module uart_top #(
     parameter integer CLK_FREQ_HZ = 50000000,
-    parameter integer BAUD_RATE = 9600
+    parameter integer BAUD_RATE   = 9600
 )(
-    input wire clk,
-    input wire rst,
-
-    input wire [7:0] data_in,
-    input wire write_en,
-    output wire fifo_full,
-    output wire fifo_empty,
-
-    output wire tx,
-    output wire tx_busy,
-    output wire tx_done,
-
-    input wire rx,
+    input  wire       clk,
+    input  wire       rst,
+    input  wire [7:0] data_in,
+    input  wire       write_en,
+    output wire       fifo_full,
+    output wire       fifo_empty,
+    output wire       tx,
+    output wire       tx_busy,
+    output wire       tx_done,
+    input  wire       rx,
     output wire [7:0] rx_data,
-    output wire rx_done,
-    output wire rx_busy
+    output wire       rx_done,
+    output wire       rx_busy
 );
 
-    localparam integer CLKS_PER_BIT = CLK_FREQ_HZ / BAUD_RATE;
-
-    localparam CTRL_IDLE  = 2'd0;
-    localparam CTRL_FETCH = 2'd1;
-    localparam CTRL_START = 2'd2;
-    localparam CTRL_WAIT  = 2'd3;
+    localparam [1:0] CTRL_IDLE  = 2'd0;
+    localparam [1:0] CTRL_FETCH = 2'd1;
+    localparam [1:0] CTRL_START = 2'd2;
+    localparam [1:0] CTRL_WAIT  = 2'd3;
 
     reg [1:0] ctrl_state;
 
@@ -35,7 +29,6 @@ module uart_top #(
     wire fifo_rd_en;
     wire tx_start;
 
-    // Baud-rate generator
     baud_gen #(
         .CLK_FREQ_HZ(CLK_FREQ_HZ),
         .BAUD_RATE(BAUD_RATE)
@@ -45,7 +38,6 @@ module uart_top #(
         .baud_tick(baud_tick)
     );
 
-    // FIFO buffer
     fifo fifo_inst (
         .clk(clk),
         .rst(rst),
@@ -57,7 +49,6 @@ module uart_top #(
         .empty(fifo_empty)
     );
 
-    // UART transmitter
     uart_tx tx_inst (
         .clk(clk),
         .rst(rst),
@@ -69,9 +60,9 @@ module uart_top #(
         .tx_done(tx_done)
     );
 
-    // UART receiver
     uart_rx #(
-        .CLKS_PER_BIT(CLKS_PER_BIT)
+        .CLK_FREQ_HZ(CLK_FREQ_HZ),
+        .BAUD_RATE(BAUD_RATE)
     ) rx_inst (
         .clk(clk),
         .reset(rst),
@@ -81,17 +72,15 @@ module uart_top #(
         .rx_busy(rx_busy)
     );
 
-    // FIFO and transmitter controller
     assign fifo_rd_en = (ctrl_state == CTRL_FETCH);
-    assign tx_start = (ctrl_state == CTRL_START);
+    assign tx_start   = (ctrl_state == CTRL_START);
 
-    always @(posedge clk) begin
+    always @(posedge clk or posedge rst) begin
         if (rst) begin
             ctrl_state <= CTRL_IDLE;
         end
         else begin
             case (ctrl_state)
-
                 CTRL_IDLE: begin
                     if (!fifo_empty && !tx_busy)
                         ctrl_state <= CTRL_FETCH;
@@ -110,10 +99,7 @@ module uart_top #(
                         ctrl_state <= CTRL_IDLE;
                 end
 
-                default: begin
-                    ctrl_state <= CTRL_IDLE;
-                end
-
+                default: ctrl_state <= CTRL_IDLE;
             endcase
         end
     end
