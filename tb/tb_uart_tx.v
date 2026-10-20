@@ -16,25 +16,19 @@ module tb_uart_tx;
     reg [7:0] received;
 
     baud_gen #(
-        .CLK_FREQ_HZ(100),
-        .BAUD_RATE(10)
+        .CLK_FREQ_HZ(100_000_000),
+        .BAUD_RATE(10_000_000)
     ) bg (
-        .clk(clk),
-        .rst(rst),
-        .baud_tick(baud_tick)
+        .clk(clk), .rst(rst), .baud_tick(baud_tick)
     );
 
     uart_tx dut (
-        .clk(clk),
-        .rst(rst),
-        .tx_start(tx_start),
-        .tx_data(tx_data),
-        .baud_tick(baud_tick),
-        .tx(tx),
-        .tx_busy(tx_busy),
-        .tx_done(tx_done)
+        .clk(clk), .rst(rst), .tx_start(tx_start),
+        .tx_data(tx_data), .baud_tick(baud_tick),
+        .tx(tx), .tx_busy(tx_busy), .tx_done(tx_done)
     );
 
+    initial clk = 1'b0;
     always #5 clk = ~clk;
 
     task test_byte;
@@ -42,44 +36,34 @@ module tb_uart_tx;
         begin
             @(negedge clk);
             tx_data = expected;
-            tx_start = 1;
+            tx_start = 1'b1;
 
             @(negedge clk);
-            tx_start = 0;
+            tx_start = 1'b0;
 
-            // Wait for the falling edge of the start bit
             @(negedge tx);
-
-            // Sample near the middle of the start bit
             repeat (5) @(negedge clk);
-
             if (tx !== 1'b0)
-                $fatal(1, "FAIL: Incorrect start bit");
+                $fatal(1, "FAIL: Incorrect start bit for %h", expected);
 
-            // Sample all 8 data bits, LSB first
             for (i = 0; i < 8; i = i + 1) begin
                 repeat (10) @(negedge clk);
                 received[i] = tx;
             end
 
-            // Sample the stop bit
             repeat (10) @(negedge clk);
-
             if (tx !== 1'b1)
-                $fatal(1, "FAIL: Incorrect stop bit");
+                $fatal(1, "FAIL: Incorrect stop bit for %h", expected);
 
-            // Wait for transmission completion
             wait (tx_done === 1'b1);
-
             if (received !== expected)
-                $fatal(1,
-                    "FAIL: Expected %h, received %h",
-                    expected, received);
+                $fatal(1, "FAIL: Expected %h, received %h", expected, received);
 
+            #1;
             if (tx_busy !== 1'b0)
-                $fatal(1, "FAIL: tx_busy should be LOW");
+                $fatal(1, "FAIL: tx_busy should be LOW after completion");
 
-            $display("PASS: TX=%h RX=%h", expected, received);
+            $display("PASS: TX=%h, sampled=%h", expected, received);
         end
     endtask
 
@@ -87,15 +71,13 @@ module tb_uart_tx;
         $dumpfile("sim/uart_tx.vcd");
         $dumpvars(0, tb_uart_tx);
 
-        clk = 0;
-        rst = 1;
-        tx_start = 0;
-        tx_data = 0;
-        received = 0;
+        rst = 1'b1;
+        tx_start = 1'b0;
+        tx_data = 8'b0;
+        received = 8'b0;
 
         #22;
-        rst = 0;
-
+        rst = 1'b0;
         repeat (2) @(negedge clk);
 
         test_byte(8'hA5);
@@ -109,7 +91,7 @@ module tb_uart_tx;
 
     initial begin
         #100000;
-        $fatal(1, "FAIL: Simulation timeout");
+        $fatal(1, "FAIL: UART TX simulation timed out");
     end
 
 endmodule

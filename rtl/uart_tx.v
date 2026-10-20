@@ -1,20 +1,20 @@
-module uart_tx(
-    input wire clk,
-    input wire rst,
-    input wire tx_start,
-    input wire [7:0] tx_data,
-    input wire baud_tick,
-    output reg tx,
-    output reg tx_busy,
-    output reg tx_done
+module uart_tx (
+    input  wire       clk,
+    input  wire       rst,
+    input  wire       tx_start,
+    input  wire [7:0] tx_data,
+    input  wire       baud_tick,
+    output reg        tx,
+    output reg        tx_busy,
+    output reg        tx_done
 );
 
-    localparam IDLE      = 3'd0;
-    localparam START_WAIT = 3'd1;
-    localparam START_BIT = 3'd2;
-    localparam DATA      = 3'd3;
-    localparam STOP_BIT  = 3'd4;
-    localparam STOP_HOLD = 3'd5;
+    localparam [2:0] IDLE       = 3'd0;
+    localparam [2:0] START_WAIT = 3'd1;
+    localparam [2:0] START_BIT  = 3'd2;
+    localparam [2:0] DATA       = 3'd3;
+    localparam [2:0] STOP_BIT   = 3'd4;
+    localparam [2:0] STOP_HOLD  = 3'd5;
 
     reg [2:0] state;
     reg [7:0] shift_reg;
@@ -36,7 +36,6 @@ module uart_tx(
                 IDLE: begin
                     tx      <= 1'b1;
                     tx_busy <= 1'b0;
-
                     if (tx_start) begin
                         shift_reg <= tx_data;
                         bit_index <= 3'd0;
@@ -66,12 +65,10 @@ module uart_tx(
                         tx        <= shift_reg[0];
                         shift_reg <= {1'b0, shift_reg[7:1]};
 
-                        if (bit_index == 3'd7) begin
+                        if (bit_index == 3'd7)
                             state <= STOP_BIT;
-                        end
-                        else begin
+                        else
                             bit_index <= bit_index + 1'b1;
-                        end
                     end
                 end
 
@@ -95,6 +92,7 @@ module uart_tx(
                     state   <= IDLE;
                     tx      <= 1'b1;
                     tx_busy <= 1'b0;
+                    tx_done <= 1'b0;
                 end
             endcase
         end
