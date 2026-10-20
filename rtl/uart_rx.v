@@ -1,14 +1,4 @@
-
 module uart_rx #(
-    parameter CLKS_PER_BIT = 16
-)(
-    input clk,
-    input reset,
-    input rx,
-
-    output reg [7:0] rx_data,
-    output reg rx_done,
-    output reg rx_bumodule uart_rx #(
     parameter integer CLK_FREQ_HZ = 50000000,
     parameter integer BAUD_RATE   = 9600,
 
@@ -35,7 +25,6 @@ module uart_rx #(
     reg [2:0] bit_index;
     reg [COUNT_WIDTH-1:0] clk_count;
 
-    
     reg rx_meta;
     reg rx_sync;
 
@@ -62,6 +51,7 @@ module uart_rx #(
                     clk_count <= {COUNT_WIDTH{1'b0}};
                     bit_index <= 3'b0;
 
+                  
                     if (rx_sync == 1'b0) begin
                         state   <= START;
                         rx_busy <= 1'b1;
@@ -69,7 +59,7 @@ module uart_rx #(
                 end
 
                 START: begin
-                   
+                  
                     if (clk_count == (CLKS_PER_BIT / 2 - 1)) begin
                         clk_count <= {COUNT_WIDTH{1'b0}};
                         if (rx_sync == 1'b0) begin
@@ -87,10 +77,10 @@ module uart_rx #(
                 end
 
                 DATA: begin
-                
+                  
                     if (clk_count == CLKS_PER_BIT - 1) begin
                         clk_count <= {COUNT_WIDTH{1'b0}};
-                     
+                        
                         shift_reg <= {rx_sync, shift_reg[7:1]};
 
                         if (bit_index == 3'd7)
@@ -104,7 +94,7 @@ module uart_rx #(
                 end
 
                 STOP: begin
-                   
+                    
                     if (clk_count == CLKS_PER_BIT - 1) begin
                         clk_count <= {COUNT_WIDTH{1'b0}};
                         state     <= IDLE;
@@ -124,111 +114,6 @@ module uart_rx #(
                     clk_count <= {COUNT_WIDTH{1'b0}};
                     rx_busy   <= 1'b0;
                 end
-            endcase
-        end
-    end
-
-endmodulesy
-);
-
-    localparam IDLE  = 2'b00;
-    localparam START = 2'b01;
-    localparam DATA  = 2'b10;
-    localparam STOP  = 2'b11;
-
-    reg [1:0] state;
-    reg [7:0] shift_reg;
-    reg [2:0] bit_index;
-    integer clk_count;
-
-    always @(posedge clk) begin
-        if (reset) begin
-            state     <= IDLE;
-            rx_data   <= 8'b0;
-            rx_done   <= 1'b0;
-            rx_busy   <= 1'b0;
-            shift_reg <= 8'b0;
-            bit_index <= 3'b0;
-            clk_count <= 0;
-        end
-        else begin
-            rx_done <= 1'b0;
-
-            case (state)
-
-                IDLE: begin
-                    rx_busy   <= 1'b0;
-                    clk_count <= 0;
-                    bit_index <= 0;
-
-                    
-                    if (rx == 1'b0) begin
-                        state   <= START;
-                        rx_busy <= 1'b1;
-                    end
-                end
-
-                START: begin
-                   
-                    if (clk_count == (CLKS_PER_BIT/2 - 1)) begin
-                        clk_count <= 0;
-
-                        if (rx == 1'b0) begin
-                            state     <= DATA;
-                            bit_index <= 0;
-                        end
-                        else begin
-                            state   <= IDLE;
-                            rx_busy <= 1'b0;
-                        end
-                    end
-                    else begin
-                        clk_count <= clk_count + 1;
-                    end
-                end
-
-                DATA: begin
-                   
-                    if (clk_count == CLKS_PER_BIT - 1) begin
-                        clk_count <= 0;
-
-                        shift_reg <= {rx, shift_reg[7:1]};
-
-                        if (bit_index == 3'd7) begin
-                            state <= STOP;
-                        end
-                        else begin
-                            bit_index <= bit_index + 1'b1;
-                        end
-                    end
-                    else begin
-                        clk_count <= clk_count + 1;
-                    end
-                end
-
-                STOP: begin
-                    if (clk_count == CLKS_PER_BIT - 1) begin
-                        clk_count <= 0;
-                        state     <= IDLE;
-                        rx_busy   <= 1'b0;
-
-                        
-                        if (rx == 1'b1) begin
-                            rx_data <= shift_reg;
-                            rx_done <= 1'b1;
-                        end
-                    end
-                    else begin
-                        clk_count <= clk_count + 1;
-                    end
-                end
-
-                default: begin
-                    state     <= IDLE;
-                    clk_count <= 0;
-                    rx_busy   <= 1'b0;
-                end
-
             endcase
         end
     end
