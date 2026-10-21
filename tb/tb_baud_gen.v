@@ -6,8 +6,6 @@ module tb_baud_gen;
     reg rst;
     wire baud_tick;
 
-    // The testbench clock has a 10 ns period = 100 MHz. These accelerated
-    // simulation parameters preserve 10 clocks per bit for a short test.
     localparam integer CLK_FREQ_HZ = 100_000_000;
     localparam integer BAUD_RATE   = 10_000_000;
     localparam integer EXPECTED_CLKS_PER_BIT = 10;
