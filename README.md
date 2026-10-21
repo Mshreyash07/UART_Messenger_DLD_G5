@@ -1,184 +1,302 @@
-# UART-Based Digital Communication System
+# UART-Based Secure Digital Communication System
 
-A **CS203 Group 5** project to design and verify an 8-bit UART communication system using Verilog. The project is software-only: the design will be implemented and tested through simulation, without physical hardware or FPGA deployment.
+A **CS203 Group 5** project implementing an 8-bit UART communication system with ChaCha20 encryption and extended Hamming error correction. The design is written in Verilog and verified through simulation; the project scope is software/RTL simulation only, with no physical hardware or FPGA deployment currently included.
 
-> **Status:** Work in progress. The repository structure has been created; the Verilog modules and testbenches are planned implementation tasks. Features described below are goals, not completed results.
+> **Status:** The baseline UART, ChaCha20, Hamming modules, secure top-level integration, and testbenches are present in the project. The end-to-end testbench has been prepared, but a top-level simulation should be run locally before claiming the integrated design has passed. Record actual simulator results in the project documentation.
 
 ## Project Overview
 
-UART (Universal Asynchronous Receiver/Transmitter) sends data serially without a separate clock wire between the transmitter and receiver. This project aims to implement a modular UART system that accepts 8-bit data, buffers bytes when needed, transmits UART frames, and reconstructs the data at the receiver.
+The project sends variable-length messages from a sender to a receiver over a UART serial link. Before transmission, the sender encrypts the message using ChaCha20 and protects each packet byte with extended Hamming (13,8). The receiver reconstructs the packet, corrects supported transmission errors, and decrypts the ciphertext.
 
-The initial target configuration is **8N1**:
+The UART framing is **8N1**:
 
 - 8 data bits
-- No parity bit
+- No UART parity bit
 - 1 stop bit
-- Idle serial line is logic HIGH
-- Data bits are transmitted least-significant bit first
+- Idle serial line HIGH
+- Data transmitted least-significant bit first
 
-The initial simulation parameters may use a 50 MHz system clock and 9600 baud. These values should be kept configurable where practical and confirmed by the team before implementation.
-
-## Planned Core Features
-
-- UART transmitter (TX) controlled by a finite state machine (FSM)
-- UART receiver (RX) with start-bit detection and data sampling
-- Baud-rate timing generator
-- FIFO buffer to queue bytes and support burst input
-- Top-level integration of the modules
-- Verilog testbenches for individual modules and the complete system
-- TX-to-RX loopback tests and waveform inspection
-- Tests for reset, serial framing, FIFO ordering, and FIFO full/empty conditions
-
-## Planned Extensions: Error Detection and Correction
-
-After the basic UART system works, the team is considering adding error-control features. These are proposed extensions and are **not yet implemented**.
-
-### 1. UART parity-bit support
-
-Add selectable **even parity** and **odd parity** to the UART transmitter and receiver. With parity enabled, the transmitter sends an extra parity bit and the receiver checks it. A parity mismatch raises a `parity_error` flag.
-
-- Keep 8N1 as the initial baseline configuration.
-- Add 8E1 (8 data bits, even parity, 1 stop bit) and/or 8O1 (8 data bits, odd parity, 1 stop bit) as supported modes.
-- Test normal frames and frames with an intentionally flipped data or parity bit.
-
-**Limitation:** A parity bit detects many one-bit errors, but it does not detect every possible multi-bit error and cannot correct corrupted data.
-
-### 2. Hamming-code protection for payload bytes
-
-The team is also considering using a Hamming code to protect each 8-bit payload before it is passed to UART. The receiver would decode the protected payload after receiving the UART bytes.
-
-- A Hamming (12,8) code adds four check bits to eight data bits and can correct a single-bit error under its standard assumptions.
-- An extended Hamming (13,8) code adds an overall parity bit as well; it can provide single-error correction and double-error detection (SECDED).
-- The coded bits would be transported using ordinary UART frames. This coding is separate from UART's optional frame parity bit.
-- Testbenches should inject controlled bit errors and check correction/detection behavior.
-
-The exact code and frame format will be selected after the basic UART has been verified. Hamming coding adds extra bits and implementation complexity, so it should be attempted only after the core TX/RX and FIFO paths are stable.
-
-### Possible Future Extension: Secure Messaging
-
-A further extension may encrypt message bytes before UART transmission and decrypt them at the receiver. This extension is not yet implemented and should be considered only after the baseline design works and the instructor approves the expanded scope. A secure design would also need sound key handling and message authentication; encryption alone does not guarantee tamper detection.
+The secure integration keeps UART framing separate from Hamming coding. Each 8-bit packet byte is Hamming-encoded into a 13-bit codeword, then sent as two ordinary UART payload bytes.
 
 ## Architecture
 
 ```text
-8-bit input data
-      |
-      v
-+-------------+
-| FIFO Buffer |
-+-------------+
-      |
-      v
+Sender/host byte stream
+        |
+        v
++--------------------+
+| ChaCha20 encryption|
++--------------------+
+        |
+        v
++--------------------------+
+| Packet header + ciphertext|
+| Sync, nonce, length, data |
++--------------------------+
+        |
+        v
 +-------------------------+
-| Optional payload encoder|
-| (Hamming-code extension)|
+| Hamming encoder (13,8)  |
 +-------------------------+
-      |
-      v
-+-------------+       +-------------------+
-| UART TX FSM |<------| Baud-rate timing  |
-| + optional  |       +-------------------+
-| parity bit  |
-+-------------+
-      |
-      | serial TX
-      v
-+-------------+       +-------------------+
-| UART RX FSM |<------| Baud-rate timing  |
-| + parity    |
-| check       |
-+-------------+
-      |
-      v
+        |
+        v
 +-------------------------+
-| Optional payload decoder|
-| (Hamming-code extension)|
+| Hamming packetizer      |
+| 13 bits -> two 8-bit    |
+| UART payload bytes      |
 +-------------------------+
-      |
-      v
-8-bit received data
-      |
-      v
-Testbench compares sent and received data
+        |
+        v
++-------------------------+
+| FIFO -> UART transmitter|
++-------------------------+
+        |
+        | Serial UART TX/RX channel
+        v
++-------------------------+
+| UART receiver          |
++-------------------------+
+        |
+        v
++-------------------------+
+| Hamming depacketizer    |
+| two bytes -> 13-bit word|
++-------------------------+
+        |
+        v
++-------------------------+
+| Hamming decoder (13,8)  |
++-------------------------+
+        |
+        v
++-------------------------+
+| Packet parser           |
+| Sync, nonce, length     |
++-------------------------+
+        |
+        v
++-------------------------+
+| ChaCha20 decryption     |
++-------------------------+
+        |
+        v
+Recovered plaintext stream
 ```
 
-The exact timing interface and FIFO read behavior will be defined during implementation. The baud-rate generator supplies timing; it does not carry payload data. The payload encoder/decoder are optional planned extensions and are not required for the initial 8N1 implementation.
+`secure_uart_top.v` is the top-level module for the secure system. The original `uart_top.v` remains the basic UART integration and is not replaced by the secure top level.
 
-## Repository Structure
+## RTL Modules
+
+| File | Responsibility |
+|---|---|
+| `rtl/baud_gen.v` | Generates baud-rate timing ticks from the system clock. |
+| `rtl/uart_tx.v` | Serializes each 8-bit payload into a UART 8N1 frame. |
+| `rtl/uart_rx.v` | Detects and samples incoming UART frames to recover bytes. |
+| `rtl/fifo.v` | Buffers bytes before UART transmission. |
+| `rtl/uart_top.v` | Original/basic UART integration. |
+| `rtl/chacha20_keystream.v` | Shared ChaCha20 keystream/block generator. |
+| `rtl/chacha20_encrypt.v` | Encrypts each plaintext byte by XORing it with the ChaCha20 keystream. |
+| `rtl/chacha20_decrypt.v` | Recovers plaintext by XORing ciphertext with the same keystream, generated from the same key, nonce, and counter. |
+| `rtl/hamming_encoder.v` | Encodes each 8-bit packet byte into an extended Hamming (13,8) codeword. |
+| `rtl/hamming_decoder.v` | Decodes a 13-bit codeword, corrects supported single-bit errors, and reports detected double-bit errors. |
+| `rtl/hamming_packetizer.v` | Splits each 13-bit codeword into two 8-bit UART payload bytes. |
+| `rtl/hamming_depacketizer.v` | Reassembles the pair of UART payload bytes into a 13-bit codeword and checks padding bits. |
+| `rtl/secure_uart_top.v` | Integrates encryption/decryption, packet handling, Hamming coding, FIFO, baud generator, UART TX, and UART RX. |
+
+### Testbenches
+
+The repository includes testbenches for both the original UART modules and the secure integration. Keep and run the baseline UART tests as well as the newer ChaCha20 and Hamming tests; the secure top-level test does not replace them.
+
+| File | Scope |
+|---|---|
+| `tb/tb_baud_gen.v` | Baud-tick interval and reset behavior. |
+| `tb/tb_fifo.v` | FIFO ordering, full/empty behavior, and boundary conditions. |
+| `tb/tb_uart_tx.v` | UART transmitter framing, bit order, and TX status behavior. |
+| `tb/tb_uart_rx.v` | UART receiver sampling and received-byte reconstruction. |
+| `tb/tb_uart_top.v` | Basic UART top-level integration and loopback behavior. |
+| `tb/tb_chacha20.v` | ChaCha20 known-vector, encryption/decryption, and multi-block tests. |
+| `tb/tb_hamming_encoder.v` | Hamming encoder tests. |
+| `tb/tb_hamming_decoder.v` | Hamming decoder tests, including error cases. |
+| `tb/tb_hamming_system.v` | Hamming encoder/packetizer/depacketizer/decoder integration tests. |
+| `tb/tb_secure_uart_top.v` | End-to-end secure UART loopback tests. |
+
+## Hamming (13,8) Encoding and UART Packing
+
+The secure design uses **extended Hamming (13,8)**: eight data bits plus five check bits. Under the standard SECDED assumptions it can correct a single-bit error and detect a double-bit error in a codeword.
+
+For every 13-bit codeword `codeword[12:0]`, the packetizer transmits:
+
+- First UART payload byte: `codeword[7:0]`
+- Second UART payload byte: `{3'b000, codeword[12:8]}`
+
+At the receiver, the depacketizer restores the codeword. The three padding bits must be zero. A Hamming codeword is not a UART frame: each of the two bytes is separately sent using ordinary 8N1 UART framing.
+
+## Secure Packet Format
+
+Every packet byte, including the header, is Hamming-encoded before UART transmission.
+
+| Packet byte index | Contents |
+|---|---|
+| `0` | Sync byte `8'hC3` |
+| `1` | Sync byte `8'h5A` |
+| `2..13` | 96-bit nonce, most-significant byte first |
+| `14` | Message length, high byte |
+| `15` | Message length, low byte |
+| `16` onward | ChaCha20 ciphertext, exactly `message_length` bytes |
+
+The message length is supplied before transmission starts, and the host must provide exactly that many plaintext bytes.
+
+## `secure_uart_top` Host Interface
+
+### Transmit
+
+1. Keep `key` stable when starting a message.
+2. Configure `nonce_prefix` according to the nonce-uniqueness rules below.
+3. Wait until `tx_message_ready` is HIGH and supply a nonzero `tx_message_length`.
+4. Pulse `tx_message_start` while `tx_message_ready` is HIGH.
+5. Supply exactly `tx_message_length` bytes using `tx_data_valid` and `tx_data_ready`. A byte transfers on a rising clock edge when both are HIGH.
+6. Observe `tx_message_done` for completion and `tx_error` for rejected input or nonce exhaustion.
+
+Zero-length messages are rejected by this interface. The message length is 16 bits, so the packet format supports lengths from 1 to 65,535 bytes, subject to available FIFO capacity, counter limits, and the behavior of the complete system.
+
+### Receive
+
+- `rx_data_valid` marks a recovered plaintext byte.
+- `rx_data_last` marks the final byte of a received message.
+- `rx_message_done` is asserted with the final valid plaintext byte.
+- `rx_single_error_corrected` is a status pulse when a single-bit error was corrected.
+- `rx_packet_error` reports a detected Hamming or packet-format error.
+
+## Nonce Handling
+
+The top-level creates the 96-bit nonce as:
 
 ```text
-UART_Project/
-├── rtl/                  # Verilog design modules
-│   ├── baud_gen.v
-│   ├── fifo.v
-│   ├── uart_tx.v
-│   ├── uart_rx.v
-│   └── uart_top.v
-├── tb/                   # Verilog testbenches
-│   ├── tb_baud_gen.v
-│   ├── tb_fifo.v
-│   ├── tb_uart_tx.v
-│   ├── tb_uart_rx.v
-│   └── tb_uart_top.v
-├── sim/                  # Generated simulation outputs (not all files are committed)
-├── docs/                 # Proposal, report, and diagrams
-├── README.md
-└── .gitignore
+nonce = {nonce_prefix[63:0], nonce_counter[31:0]}
 ```
 
-If the parity or Hamming extensions are approved, additional RTL modules and testbenches can be added, such as `parity_check.v`, `hamming_encoder.v`, `hamming_decoder.v`, `tb_parity.v`, and `tb_hamming.v`.
+The 32-bit counter increments for each accepted message and stops rather than wrapping. **This is a counter-based nonce scheme, not a true random-number generator.** The nonce prefix is provided as an input and is not secret.
+
+Never encrypt two different messages with the same ChaCha20 key and nonce. Because the counter resets when the hardware resets, the system must use a prefix that is unique for each sender/session under the same key, or preserve the counter across resets. For multiple senders sharing a key, nonce allocation must prevent collisions between senders as well.
+
+## Security Limitations
+
+- ChaCha20 provides confidentiality but does **not** authenticate the ciphertext or detect malicious modifications by itself.
+- Hamming coding can correct supported accidental transmission errors. It is not a cryptographic integrity check and does not prevent intentional tampering or replay.
+- For a real secure messaging design, use an authenticated encryption scheme such as **ChaCha20-Poly1305** and verify the authentication tag before releasing plaintext.
+- This project's sync-and-length packet format is an educational integration baseline; it does not currently implement retransmission, authenticated packet sequence numbers, or comprehensive recovery after inserted/dropped UART bytes.
 
 ## Tools
 
-The team plans to use:
-
-- **Verilog** for the design and testbenches
-- **Icarus Verilog** to compile and run simulations
-- **GTKWave** to inspect waveform files
-- **Visual Studio Code** as the code editor
-- **Git and GitHub** for version control and collaboration
-
-Other simulators may be used if required by the course.
+- **Verilog** for RTL and testbenches
+- **Icarus Verilog (`iverilog`)** for compilation
+- **VVP (`vvp`)** for running simulations
+- **GTKWave** for viewing VCD waveforms
+- **Visual Studio Code** for editing and running commands
+- **Git and GitHub** for version control
 
 ## How to Simulate
 
-Once the top-level module and testbench have been implemented, run commands similar to the following from the repository root in a shell with Icarus Verilog installed:
+Run commands from the project root in a PowerShell terminal with Icarus Verilog installed. The commands below assume that the design files are in `rtl/`, the testbenches are in `tb/`, and the `sim/` directory exists. In PowerShell, create it if needed using:
 
-```bash
-iverilog -g2012 -o sim/uart_sim \
-  tb/tb_uart_top.v \
-  rtl/uart_top.v \
-  rtl/uart_tx.v \
-  rtl/uart_rx.v \
-  rtl/fifo.v \
-  rtl/baud_gen.v
-
-vvp sim/uart_sim
+```powershell
+New-Item -ItemType Directory -Force sim | Out-Null
 ```
 
-To inspect waveforms, the testbench should generate a VCD file using `$dumpfile` and `$dumpvars`. Open the generated VCD file in GTKWave, for example:
+### End-to-end secure UART test
 
-```bash
-gtkwave sim/uart.vcd
+Compile the top-level design and its testbench:
+
+```powershell
+iverilog -g2012 -s tb_secure_uart_top -o sim/tb_secure_uart_top.out `
+  tb/tb_secure_uart_top.v `
+  rtl/secure_uart_top.v `
+  rtl/baud_gen.v rtl/fifo.v rtl/uart_tx.v rtl/uart_rx.v `
+  rtl/chacha20_keystream.v rtl/chacha20_encrypt.v rtl/chacha20_decrypt.v `
+  rtl/hamming_encoder.v rtl/hamming_packetizer.v `
+  rtl/hamming_depacketizer.v rtl/hamming_decoder.v
+
+vvp sim/tb_secure_uart_top.out
 ```
 
-These commands are templates and may need to be adjusted to match the final module interfaces and waveform output path. They will not work until the source modules and testbench have been implemented.
+The current `tb_secure_uart_top.v` testbench uses accelerated timing (100 MHz clock and 10 clocks per UART bit) and tests these clean-loopback messages:
 
-## Verification Plan
+1. `Hello` (5 bytes)
+2. `Hello, I am Rishi!` (18 bytes)
+3. A 70-byte message that crosses the ChaCha20 64-byte keystream-block boundary
 
-The planned verification includes:
+It compares every received plaintext byte and message boundary, and stops with `$fatal` on a mismatch, unexpected packet error, or timeout. It does not inject serial-line bit errors; error correction is tested separately by the Hamming testbenches.
 
-1. Reset and initial-state checks.
-2. Baud tick interval checks.
-3. UART TX start bit, eight data bits, stop bit, and bit-order checks.
-4. UART RX reconstruction of generated test frames.
-5. FIFO ordering, full/empty, and boundary-condition tests.
-6. Loopback tests comparing each transmitted byte with the corresponding received byte.
-7. Multi-byte burst tests to check that bytes are preserved and delivered in order.
-8. **Parity extension:** verify even/odd parity generation, correct parity acceptance, and parity-error flagging after controlled bit flips.
-9. **Hamming extension:** inject single-bit errors to test correction and, if extended Hamming (13,8) is selected, inject double-bit errors to test detection.
+### ChaCha20 testbench
 
-Simulation results and waveform screenshots will be added after tests are run. No successful results are claimed at this stage.
+```powershell
+iverilog -g2012 -s tb_chacha20 -o sim/tb_chacha20.out `
+  rtl/chacha20_keystream.v rtl/chacha20_encrypt.v rtl/chacha20_decrypt.v `
+  tb/tb_chacha20.v
+
+vvp sim/tb_chacha20.out
+```
+
+### Hamming testbenches
+
+```powershell
+iverilog -g2012 -s tb_hamming_encoder -o sim/tb_hamming_encoder.out `
+  rtl/hamming_encoder.v tb/tb_hamming_encoder.v
+vvp sim/tb_hamming_encoder.out
+
+iverilog -g2012 -s tb_hamming_decoder -o sim/tb_hamming_decoder.out `
+  rtl/hamming_decoder.v tb/tb_hamming_decoder.v
+vvp sim/tb_hamming_decoder.out
+
+iverilog -g2012 -s tb_hamming_system -o sim/tb_hamming_system.out `
+  rtl/hamming_encoder.v rtl/hamming_decoder.v `
+  rtl/hamming_packetizer.v rtl/hamming_depacketizer.v `
+  tb/tb_hamming_system.v
+vvp sim/tb_hamming_system.out
+```
+
+### Basic UART regression testbenches
+
+Run these five baseline testbenches as well as the secure top-level test. They verify the original UART modules individually and ensure that later secure-system changes do not silently break the basic UART design. All five testbench files are listed in the repository structure above.
+
+```powershell
+iverilog -g2012 -s tb_baud_gen -o sim/tb_baud_gen.out `
+  tb/tb_baud_gen.v rtl/baud_gen.v
+vvp sim/tb_baud_gen.out
+
+iverilog -g2012 -s tb_fifo -o sim/tb_fifo.out `
+  tb/tb_fifo.v rtl/fifo.v
+vvp sim/tb_fifo.out
+
+iverilog -g2012 -s tb_uart_tx -o sim/tb_uart_tx.out `
+  tb/tb_uart_tx.v rtl/uart_tx.v rtl/baud_gen.v
+vvp sim/tb_uart_tx.out
+
+iverilog -g2012 -s tb_uart_rx -o sim/tb_uart_rx.out `
+  tb/tb_uart_rx.v rtl/uart_rx.v
+vvp sim/tb_uart_rx.out
+
+iverilog -g2012 -s tb_uart_top -o sim/tb_uart_top.out `
+  tb/tb_uart_top.v rtl/uart_top.v rtl/baud_gen.v `
+  rtl/fifo.v rtl/uart_tx.v rtl/uart_rx.v
+vvp sim/tb_uart_top.out
+```
+
+If one of these legacy testbench files is not present in your local `tb/` directory, skip only that corresponding command. Do not remove the testbench merely because the secure integration has its own test.
+
+To inspect waveforms, add `$dumpfile` and `$dumpvars` to the relevant testbench, then open the generated VCD file in GTKWave, for example:
+
+```powershell
+gtkwave sim/secure_uart.vcd
+```
+
+The path in the `gtkwave` command must match the filename actually generated by the testbench.
+
+## Verification Status
+
+The integrated secure top-level testbench has been marked as compiled and run in the target environment, and end-to-end simulation logs and waveform screenshots have been marked as saved. Keep the actual logs and screenshots in the repository (for example, under `docs/` or `sim/`) so the results can be reviewed and reproduced.
+
+Testbenches are provided for all five baseline UART components (`baud_gen`, `fifo`, `uart_tx`, `uart_rx`, and `uart_top`), as well as ChaCha20, Hamming, and the secure top-level integration. Run the baseline tests and secure-system tests together. Keep this section and the project progress checklist synchronized with the latest local simulator results.
 
 ## Team
 
@@ -195,17 +313,15 @@ Simulation results and waveform screenshots will be added after tests are run. N
 
 ## Current Progress
 
-- [x] Repository folder structure created
-- [ ] Baud-rate generator implemented and tested
-- [ ] UART transmitter implemented and tested
-- [ ] UART receiver implemented and tested
-- [ ] FIFO implemented and tested
-- [ ] Top-level integration completed
-- [ ] Loopback and burst tests passing
-- [ ] Simulation waveforms and results documented
-- [ ] UART parity extension designed and tested
-- [ ] Hamming-code extension scope finalized and tested
-- [ ] Optional security extension evaluated
+- [x] Basic UART RTL modules are present (`baud_gen`, `fifo`, `uart_tx`, `uart_rx`).
+- [x] Basic UART top level (`uart_top.v`) is retained.
+- [x] ChaCha20 keystream, encryption, and decryption modules are present.
+- [x] Extended Hamming (13,8) encoder and decoder are present.
+- [x] Hamming packetizer and depacketizer are present.
+- [x] Secure top-level integration (`secure_uart_top.v`) is present.
+- [x] Unit and system testbench source files are present.
+- [x] Compile and run the integrated secure top-level testbench in the target environment.
+- [x] Save end-to-end simulation logs and waveform screenshots.
 
 ## License
 
