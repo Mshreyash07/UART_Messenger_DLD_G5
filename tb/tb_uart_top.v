@@ -310,4 +310,9 @@ module tb_secure_uart_top;
         $fatal(1, "FAIL: global simulation watchdog expired");
     end
 
+    initial begin
+    $dumpfile("sim/tb_uart_top.vcd");
+    $dumpvars(0, tb_secure_uart_top);
+    end
+
 endmodule
