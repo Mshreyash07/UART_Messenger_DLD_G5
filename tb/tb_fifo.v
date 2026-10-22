@@ -108,9 +108,9 @@ module tb_fifo;
         $display("PASS: FIFO draining");
 
         
-        for (i = 0; i < 12; i = i + 1)
+        for (i = 0; i < 14; i = i + 1)
             write_byte(i + 8'h40);
-        for (i = 0; i < 12; i = i + 1)
+        for (i = 0; i < 14; i = i + 1)
             read_byte(i + 8'h40);
         if (!empty)
             $fatal(1, "FAIL: wraparound test did not finish empty");
