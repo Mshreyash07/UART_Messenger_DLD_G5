@@ -73,6 +73,7 @@ module hamming_decoder (
                 corrected_codeword[6],  
                 corrected_codeword[5],  
                 corrected_codeword[4],  
+                corrected_codeword[2]
             };
         end
     end
