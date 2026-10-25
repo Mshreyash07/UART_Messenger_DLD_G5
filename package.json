@@ -1,0 +1,23 @@
+{
+  "name": "g5-dld-uart-messenger-workspace",
+  "private": true,
+  "version": "1.0.0",
+  "description": "CS203 DLD Group 5 - Secure UART Messenger Verilog RTL and Interactive Web Application",
+  "scripts": {
+    "dev": "npm --prefix web run dev",
+    "build": "node scripts/bundle-data.mjs && npm --prefix web run build",
+    "bundle": "node scripts/bundle-data.mjs",
+    "preview": "npm --prefix web run preview",
+    "sim": "powershell -ExecutionPolicy Bypass -File scripts/run_all_sims.ps1"
+  },
+  "keywords": [
+    "uart",
+    "verilog",
+    "chacha20",
+    "hamming",
+    "secded",
+    "digital-logic-design"
+  ],
+  "author": "CS203 Group 5",
+  "license": "UNLICENSED"
+}
