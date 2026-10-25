@@ -190,7 +190,7 @@ export const DocumentationView: React.FC = () => {
               <span>README.md (Project Root Specification)</span>
             </div>
             <a
-              href="https://github.com/Mshreyash07/G5_DLD_UART_Messenger/blob/main/README.md"
+              href="https://github.com/Mshreyash07/UART_Messenger_DLD_G5/blob/main/README.md"
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono"

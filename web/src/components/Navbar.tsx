@@ -65,7 +65,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
           <span>Model active · v1.0</span>
         </span>
         <a
-          href="https://github.com/Mshreyash07/G5_DLD_UART_Messenger"
+          href="https://github.com/Mshreyash07/UART_Messenger_DLD_G5"
           target="_blank"
           rel="noopener noreferrer"
           className="btn-quiet flex items-center gap-1.5 text-xs"

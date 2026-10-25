@@ -38,7 +38,7 @@ export const RtlExplorerView: React.FC<RtlExplorerViewProps> = ({ initialFile })
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const githubUrl = `https://github.com/Mshreyash07/G5_DLD_UART_Messenger/blob/main/rtl/${activeModule.file}`;
+  const githubUrl = `https://github.com/Mshreyash07/UART_Messenger_DLD_G5/blob/main/rtl/${activeModule.file}`;
 
   return (
     <div className="space-y-6">

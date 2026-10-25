@@ -33,12 +33,12 @@ export const AboutView: React.FC = () => {
           <div className="p-3 rounded-lg bg-slate-950 border border-slate-800">
             <div className="text-slate-400">GitHub Repository</div>
             <a
-              href="https://github.com/Mshreyash07/G5_DLD_UART_Messenger"
+              href="https://github.com/Mshreyash07/UART_Messenger_DLD_G5"
               target="_blank"
               rel="noopener noreferrer"
               className="text-cyan-400 hover:text-cyan-300 font-bold text-sm mt-0.5 block truncate"
             >
-              Mshreyash07/G5_DLD_UART_Messenger
+              Mshreyash07/UART_Messenger_DLD_G5
             </a>
           </div>
         </div>
