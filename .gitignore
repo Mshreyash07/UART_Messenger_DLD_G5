@@ -4,3 +4,15 @@
 *.o
 *.log
 *.exe
+
+node_modules/
+**/node_modules/
+dist/
+build/
+coverage/
+
+.env
+.env.*
+!.env.example
+
+*.log
